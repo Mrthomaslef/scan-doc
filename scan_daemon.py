@@ -828,15 +828,22 @@ class ScanDocHandler(http.server.BaseHTTPRequestHandler):
 
         if path == "/api/status":
             root = get_active_gdrive_root()
-            inbox_files = [
-                p.name for p in root.iterdir()
-                if p.is_file() and not p.name.startswith(".") and p.suffix.lower() in {".pdf", ".jpg", ".jpeg", ".png", ".heic"}
-            ] if root.exists() else []
+            inbox_files = []
+            drive_mounted = False
+            try:
+                drive_mounted = root.exists()
+                if drive_mounted:
+                    inbox_files = [
+                        p.name for p in root.iterdir()
+                        if p.is_file() and not p.name.startswith(".") and p.suffix.lower() in {".pdf", ".jpg", ".jpeg", ".png", ".heic"}
+                    ]
+            except Exception:
+                pass
             history = load_history()
             self._send_json(200, {
                 "ok": True,
                 "service": "scandoc-ai",
-                "driveMounted": root.exists(),
+                "driveMounted": drive_mounted,
                 "driveRoot": str(root),
                 "tunnelUrl": current_tunnel_url,
                 "inboxCount": len(inbox_files),
