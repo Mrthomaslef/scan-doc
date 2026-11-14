@@ -650,12 +650,26 @@
     }
 
     // ==================== ANALYSE IA & SAUVEGARDE ====================
+    let analyzePromise = null;
+
     async function analyzePages() {
+      analyzePromise = _doAnalyzePages();
+      return analyzePromise;
+    }
+
+    async function _doAnalyzePages() {
       if (!pages.length) return;
       const statusEl = document.getElementById("aiStatusLabel");
-      statusEl.textContent = "Analyse IA…";
-      const today = new Date().toISOString().slice(0, 10);
-      document.getElementById("filenameInput").value = `${today}_Document.pdf`;
+      const nameInput = document.getElementById("filenameInput");
+      const saveBtn = document.getElementById("saveBtn");
+
+      statusEl.textContent = "⏳ Lecture OCR & renommage…";
+      nameInput.value = "";
+      nameInput.placeholder = "Lecture du document en cours…";
+      saveBtn.disabled = true;
+      saveBtn.textContent = "⏳ Renommage IA en cours…";
+
+      if (!backendOnline) await connectBackend();
 
       if (backendOnline && apiBaseUrl) {
         try {
@@ -677,28 +691,36 @@
               lastAnalysis = d.analysis;
               const bestName = (d.analysis.suggestedNames && d.analysis.suggestedNames[0])
                 ? d.analysis.suggestedNames[0].filename
-                : `${today}_Document.pdf`;
-              document.getElementById("filenameInput").value = bestName;
+                : "";
+              if (bestName) nameInput.value = bestName;
               if (d.analysis.recommendedFolder) {
                 document.getElementById("folderSelect").value = d.analysis.recommendedFolder;
               }
               statusEl.textContent = `✨ ${d.analysis.docType}`;
+              saveBtn.disabled = false;
+              saveBtn.textContent = "✅ Ranger dans Mon Drive";
               return;
             }
           }
         } catch (_) {}
       }
       statusEl.textContent = "Prêt";
+      saveBtn.disabled = false;
+      saveBtn.textContent = "✅ Ranger dans Mon Drive";
     }
 
     async function saveScan() {
       if (!pages.length) return;
       const btn = document.getElementById("saveBtn");
+      btn.disabled = true;
+      btn.textContent = "⏳ Enregistrement dans Mon Drive…";
+
+      if (analyzePromise) {
+        try { await analyzePromise; } catch (_) {}
+      }
+
       const filename = document.getElementById("filenameInput").value.trim() || "Document.pdf";
       const driveFolder = document.getElementById("folderSelect").value;
-
-      btn.disabled = true;
-      btn.textContent = "Enregistrement…";
 
       try {
         if (!backendOnline) await connectBackend();
@@ -722,7 +744,7 @@
           });
           const d = await r.json();
           if (r.ok && d.ok) {
-            showToast(`✅ Rangé dans ${driveFolder}`);
+            showToast(`✅ Rangé : ${d.record.filename}`);
             resetScan();
             await refreshLists();
             return;

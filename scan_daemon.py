@@ -338,35 +338,43 @@ def heuristic_analyze_ocr(ocr_text: str, page_count: int = 1, original_filename:
     text_lower = strip_accents_ascii(ocr_text.lower())
     today_str = datetime.date.today().isoformat()
 
-    # 1. Extract date from French text (ex: "le 06/11/2026", "01 NOVEMBRE 2026", "2026-11-14")
+    # 1. Extract date from French text (ex: "Fait à : PARIS\nle : 06/11/2026", "01 NOVEMBRE 2026", "2026-11-14")
     doc_date = today_str
-    # Look for "Fait à ... le DD/MM/YYYY" first
-    m_fait = re.search(r"le\s*:?\s*(\d{2})[/.-](\d{2})[/.-](20\d{2})", ocr_text, re.IGNORECASE)
+    # Look for signature date ("Fait à ... le : DD/MM/YYYY" or "le : DD/MM/YYYY") first
+    m_fait = re.search(r"(?:fait\s+[aà][\s\S]{0,40}?|le\s*:\s*)(\d{2})[/.-](\d{2})[/.-](202\d)", ocr_text, re.IGNORECASE)
     if m_fait:
         d, m, y = m_fait.group(1), m_fait.group(2), m_fait.group(3)
         if 1 <= int(m) <= 12 and 1 <= int(d) <= 31:
             doc_date = f"{y}-{m}-{d}"
     else:
-        m_iso = re.search(r"\b(20\d{2})-(\d{2})-(\d{2})\b", ocr_text)
+        m_iso = re.search(r"\b(202\d)-(\d{2})-(\d{2})\b", ocr_text)
         if m_iso:
             doc_date = f"{m_iso.group(1)}-{m_iso.group(2)}-{m_iso.group(3)}"
         else:
-            m_slash = re.search(r"\b(\d{2})/(\d{2})/(20\d{2})\b", ocr_text)
-            if m_slash and 1 <= int(m_slash.group(2)) <= 12:
-                doc_date = f"{m_slash.group(3)}-{m_slash.group(2)}-{m_slash.group(1)}"
+            # Find all DD/MM/202X dates (ignoring older law decrees like 20/03/2015)
+            m_slashes = re.findall(r"\b(\d{2})/(\d{2})/(202\d)\b", ocr_text)
+            valid_slashes = [(d, m, y) for (d, m, y) in m_slashes if 1 <= int(m) <= 12 and 1 <= int(d) <= 31]
+            if valid_slashes:
+                d, m, y = valid_slashes[-1]
+                doc_date = f"{y}-{m}-{d}"
             else:
                 months_fr = {
                     "janvier": "01", "fevrier": "02", "mars": "03", "avril": "04",
                     "mai": "05", "juin": "06", "juillet": "07", "aout": "08",
                     "septembre": "09", "octobre": "10", "novembre": "11", "decembre": "12"
                 }
-                m_words = re.search(
-                    r"\b(\d{1,2})\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)\s+(20\d{2})\b",
-                    text_lower,
+                # Ignore lines mentioning "decret" or "arrete"
+                filtered_lines = [
+                    ln for ln in text_lower.splitlines()
+                    if "decret" not in ln and "arrete" not in ln and "loi " not in ln
+                ]
+                m_words = re.findall(
+                    r"\b(\d{1,2})\s+(janvier|fevrier|mars|avril|mai|juin|juillet|aout|septembre|octobre|novembre|decembre)\s+(202\d)\b",
+                    "\n".join(filtered_lines),
                 )
                 if m_words:
-                    day_padded = f"{int(m_words.group(1)):02d}"
-                    doc_date = f"{m_words.group(3)}-{months_fr[m_words.group(2)]}-{day_padded}"
+                    day_str, month_name, year_str = m_words[-1]
+                    doc_date = f"{year_str}-{months_fr[month_name]}-{int(day_str):02d}"
 
     yymm = doc_date[2:4] + doc_date[5:7]  # e.g. 2611 or MMYY
     mmyy = doc_date[5:7] + doc_date[2:4]  # e.g. 1126
@@ -1007,6 +1015,8 @@ class ScanDocHandler(http.server.BaseHTTPRequestHandler):
             return
 
         staging_pdf = STAGING_DIR / f"{scan_id}.pdf"
+        ocr_text_from_rebuild = ""
+        page_count_from_rebuild = 1
         if not staging_pdf.is_file():
             # Rebuild from images if provided
             images = body.get("images") or []
@@ -1016,11 +1026,32 @@ class ScanDocHandler(http.server.BaseHTTPRequestHandler):
             scan_id = f"scan_{int(time.time() * 1000)}"
             staging_pdf = STAGING_DIR / f"{scan_id}.pdf"
             input_paths = self._decode_data_urls_to_files(images, scan_id)
-            run_vision_process(input_paths, staging_pdf, filter_mode=str(body.get("filter") or "magic"), autocrop=bool(body.get("autocrop", True)))
+            proc_res = run_vision_process(input_paths, staging_pdf, filter_mode=str(body.get("filter") or "magic"), autocrop=bool(body.get("autocrop", True)))
+            ocr_text_from_rebuild = proc_res.get("text") or ""
+            page_count_from_rebuild = proc_res.get("pageCount") or len(input_paths)
 
         if not staging_pdf.is_file():
             self._send_json(500, {"ok": False, "error": "Impossible de générer le PDF final"})
             return
+
+        # Si l'utilisateur a cliqué "Ranger" avant la fin de l'analyse (nom générique *_Document.pdf),
+        # on calcule automatiquement le vrai nom intelligent et le bon dossier côté serveur !
+        if re.match(r"^(\d{4}-\d{2}-\d{2}_)?document(_scanne)?\.pdf$", filename.lower()):
+            if not ocr_text_from_rebuild:
+                ocr_res = run_vision_ocr(staging_pdf)
+                ocr_text_from_rebuild = ocr_res.get("text") or ""
+                page_count_from_rebuild = ocr_res.get("pageCount") or 1
+            auto_analysis = analyze_with_gemini(ocr_text_from_rebuild, page_count=page_count_from_rebuild)
+            if auto_analysis.get("suggestedNames"):
+                filename = auto_analysis["suggestedNames"][0]["filename"]
+            if auto_analysis.get("recommendedFolder"):
+                drive_folder = auto_analysis["recommendedFolder"]
+            doc_type = auto_analysis.get("docType") or doc_type
+            doc_date = auto_analysis.get("docDate") or doc_date
+            summary = auto_analysis.get("summary") or summary
+            if auto_analysis.get("vaultCategory"):
+                vault_category = auto_analysis["vaultCategory"]
+                copy_to_vault = True
 
         root = get_active_gdrive_root()
         target_dir = root / drive_folder
