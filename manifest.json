@@ -1,0 +1,24 @@
+{
+  "name": "ScanDoc AI — Scanner iPhone vers Mon Drive",
+  "short_name": "ScanDoc AI",
+  "description": "Scanner de documents papier iPhone avec détection de bords, filtre Couleur Magique, OCR Apple Vision, renommage IA et classement automatique dans Mon Drive.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#070b14",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "apple-touch-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

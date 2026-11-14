@@ -1,0 +1,2166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>ScanDoc AI — Scanner iPhone vers Mon Drive</title>
+  <meta name="description" content="Scanner de documents papier iPhone sans filigrane avec détection de bords, filtre Couleur Magique, OCR Apple Vision, renommage IA et rangement automatique dans Mon Drive." />
+
+  <!-- PWA & iOS Home Screen -->
+  <link rel="manifest" href="manifest.json?v=1.0.0" />
+  <link rel="icon" type="image/svg+xml" href="assets/icon.svg?v=1.0.0" />
+  <link rel="apple-touch-icon" href="apple-touch-icon.png?v=1.0.0" />
+  <meta name="theme-color" content="#070b14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="ScanDoc AI" />
+
+  <script src="data/embedded_data.js?v=1.0.0"></script>
+
+  <style>
+    :root {
+      --bg-main: #070b14;
+      --bg-surface: #0f172a;
+      --bg-card: rgba(15, 23, 42, 0.86);
+      --bg-elevated: rgba(30, 41, 59, 0.85);
+      --border-subtle: rgba(148, 163, 184, 0.16);
+      --border-active: rgba(16, 185, 129, 0.55);
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-emerald: #10b981;
+      --accent-sky: #38bdf8;
+      --accent-indigo: #6366f1;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    html, body {
+      max-width: 100vw;
+      overflow-x: hidden;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      line-height: 1.45;
+    }
+
+    @media (hover: none) and (pointer: coarse) {
+      html, body {
+        overscroll-behavior-y: contain;
+      }
+    }
+
+    body {
+      background:
+        radial-gradient(circle at 12% 0%, rgba(16, 185, 129, 0.16) 0%, transparent 45%),
+        radial-gradient(circle at 88% 8%, rgba(56, 189, 248, 0.15) 0%, transparent 45%),
+        linear-gradient(180deg, #070b14 0%, #0b1120 100%);
+      padding-top: calc(10px + var(--safe-top));
+      padding-bottom: calc(104px + var(--safe-bottom));
+    }
+
+    /* Pull-to-refresh indicator (strictly icon-only, opacity 0 at rest) */
+    #ptrIndicator {
+      position: fixed;
+      top: calc(10px + var(--safe-top));
+      left: 50%;
+      transform: translate(-50%, -24px);
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+    #ptrIndicator svg {
+      width: 18px;
+      height: 18px;
+      stroke: var(--accent-sky);
+    }
+    #ptrIndicator.spinning svg {
+      animation: ptrSpin 0.75s linear infinite;
+    }
+    @keyframes ptrSpin {
+      to { transform: rotate(360deg); }
+    }
+
+    .app-shell {
+      max-width: 820px;
+      margin: 0 auto;
+      padding: 0 14px;
+    }
+
+    /* Header */
+    .top-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--bg-card);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      margin-bottom: 14px;
+    }
+
+    .brand-left {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      min-width: 0;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      flex-shrink: 0;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+    }
+
+    .brand-titles h1 {
+      font-size: 1.08rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .brand-sub {
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      padding: 6px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(15, 23, 42, 0.9);
+      cursor: pointer;
+      flex-shrink: 0;
+      color: var(--text-main);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-amber);
+    }
+    .status-pill.online .status-dot {
+      background: var(--accent-emerald);
+      box-shadow: 0 0 8px var(--accent-emerald);
+    }
+    .status-pill.offline .status-dot {
+      background: var(--accent-sky);
+    }
+
+    /* Cards & Panels */
+    .card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 22px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+    }
+
+    .section-title {
+      font-size: 0.92rem;
+      font-weight: 800;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    /* Capture Hero Grid */
+    .capture-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn-capture-main {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      width: 100%;
+      padding: 18px 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(16, 185, 129, 0.55);
+      background: linear-gradient(135deg, #059669 0%, #0284c7 100%);
+      color: #ffffff;
+      font-size: 1.05rem;
+      font-weight: 800;
+      cursor: pointer;
+      box-shadow: 0 10px 26px rgba(16, 185, 129, 0.28);
+      transition: transform 0.12s ease;
+    }
+    .btn-capture-main:active {
+      transform: scale(0.98);
+    }
+
+    .btn-capture-sec {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 13px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      font-size: 0.84rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .btn-capture-sec:active {
+      transform: scale(0.98);
+    }
+
+    /* Live Camera Modal */
+    #cameraModal {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      z-index: 800;
+      display: none;
+      flex-direction: column;
+      justify-content: space-between;
+      padding-top: var(--safe-top);
+      padding-bottom: calc(20px + var(--safe-bottom));
+    }
+    #cameraModal.open {
+      display: flex;
+    }
+    .cam-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: rgba(0, 0, 0, 0.65);
+      z-index: 2;
+    }
+    .cam-viewport {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #000;
+    }
+    #camVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    /* A4 Document Frame Guide */
+    .cam-a4-guide {
+      position: absolute;
+      width: min(82vw, 360px);
+      aspect-ratio: 1 / 1.414;
+      border: 2.5px solid rgba(16, 185, 129, 0.85);
+      border-radius: 14px;
+      box-shadow: 0 0 0 2000px rgba(0, 0, 0, 0.42);
+      pointer-events: none;
+    }
+    .cam-a4-label {
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      white-space: nowrap;
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: #a7f3d0;
+      background: rgba(6, 78, 59, 0.85);
+      padding: 3px 10px;
+      border-radius: 999px;
+    }
+    .cam-bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 16px 20px;
+      background: rgba(0, 0, 0, 0.78);
+      z-index: 2;
+    }
+    .shutter-btn {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      border: 4px solid #ffffff;
+      background: #10b981;
+      cursor: pointer;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.6);
+    }
+    .shutter-btn:active {
+      transform: scale(0.92);
+    }
+
+    /* Scanned Pages Strip */
+    .pages-strip {
+      display: flex;
+      gap: 10px;
+      overflow-x: auto;
+      padding-bottom: 6px;
+      margin-bottom: 12px;
+      scrollbar-width: none;
+    }
+    .pages-strip::-webkit-scrollbar {
+      display: none;
+    }
+    .page-thumb-card {
+      position: relative;
+      width: 96px;
+      flex-shrink: 0;
+      border-radius: 12px;
+      border: 2px solid var(--border-subtle);
+      background: #090d16;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .page-thumb-card.active {
+      border-color: var(--accent-emerald);
+      box-shadow: 0 0 12px rgba(16, 185, 129, 0.35);
+    }
+    .page-thumb-card img {
+      width: 100%;
+      height: 124px;
+      object-fit: cover;
+      display: block;
+    }
+    .page-thumb-badge {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      background: rgba(15, 23, 42, 0.88);
+      color: #fff;
+      font-size: 0.66rem;
+      font-weight: 800;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+    .page-thumb-del {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: none;
+      background: rgba(244, 63, 94, 0.92);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .page-thumb-actions {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 6px;
+      background: rgba(15, 23, 42, 0.95);
+    }
+    .page-mini-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      padding: 2px 4px;
+    }
+
+    /* Preview Canvas Container */
+    .preview-stage {
+      position: relative;
+      background: #050811;
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    #previewCanvas {
+      max-width: 100%;
+      max-height: 360px;
+      border-radius: 8px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    }
+
+    /* Filter Pills */
+    .filter-bar {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .filter-pill {
+      flex: 1;
+      min-width: 74px;
+      padding: 8px 10px;
+      border-radius: 11px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(15, 23, 42, 0.75);
+      color: var(--text-muted);
+      font-size: 0.76rem;
+      font-weight: 700;
+      text-align: center;
+      cursor: pointer;
+    }
+    .filter-pill.active {
+      background: rgba(16, 185, 129, 0.18);
+      border-color: var(--accent-emerald);
+      color: #a7f3d0;
+    }
+
+    /* AI Rename & Folder Form */
+    .ai-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(56, 189, 248, 0.12));
+      border: 1px solid rgba(56, 189, 248, 0.32);
+      margin-bottom: 14px;
+    }
+    .ai-banner-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .ai-doc-type {
+      font-size: 0.88rem;
+      font-weight: 800;
+      color: #a7f3d0;
+    }
+    .ai-doc-summary {
+      font-size: 0.76rem;
+      color: #cbd5e1;
+      margin-top: 2px;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .name-presets {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+    .preset-option {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 9px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(15, 23, 42, 0.7);
+      cursor: pointer;
+      text-align: left;
+    }
+    .preset-option.active {
+      border-color: var(--accent-sky);
+      background: rgba(56, 189, 248, 0.14);
+    }
+    .preset-tag {
+      font-size: 0.66rem;
+      font-weight: 800;
+      color: var(--accent-sky);
+      text-transform: uppercase;
+      display: block;
+    }
+    .preset-filename {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--text-main);
+      word-break: break-all;
+    }
+
+    .text-input, .select-input {
+      width: 100%;
+      padding: 11px 13px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      background: #090d16;
+      color: var(--text-main);
+      font-size: 0.88rem;
+      font-weight: 600;
+      margin-bottom: 10px;
+    }
+    .text-input:focus, .select-input:focus {
+      outline: none;
+      border-color: var(--accent-sky);
+    }
+
+    .quick-chips {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .chip {
+      padding: 5px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(30, 41, 59, 0.7);
+      color: #cbd5e1;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .chip:active {
+      background: rgba(56, 189, 248, 0.25);
+      border-color: var(--accent-sky);
+    }
+
+    /* Folder Grid Shortcuts */
+    .folder-shortcuts {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 7px;
+      margin-bottom: 10px;
+    }
+    .folder-tile {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(15, 23, 42, 0.72);
+      color: var(--text-main);
+      font-size: 0.76rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: left;
+    }
+    .folder-tile.active {
+      border-color: var(--accent-emerald);
+      background: rgba(16, 185, 129, 0.16);
+      color: #a7f3d0;
+    }
+    .folder-tile span.f-txt {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      line-height: 1.25;
+    }
+
+    /* Toggle Row */
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(15, 23, 42, 0.6);
+      margin-bottom: 12px;
+    }
+    .toggle-row label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #e2e8f0;
+      cursor: pointer;
+      flex: 1;
+    }
+    .toggle-row input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      accent-color: var(--accent-emerald);
+      cursor: pointer;
+    }
+
+    /* Primary Save & Share Buttons */
+    .btn-save-drive {
+      width: 100%;
+      padding: 16px;
+      border-radius: 16px;
+      border: none;
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #042f2e;
+      font-size: 1rem;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 10px 25px rgba(16, 185, 129, 0.35);
+      margin-bottom: 8px;
+    }
+    .btn-save-drive:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .btn-share-ios {
+      width: 100%;
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      background: rgba(56, 189, 248, 0.12);
+      color: #e0f2fe;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    /* Split Alert Box */
+    .split-alert {
+      padding: 12px;
+      border-radius: 14px;
+      border: 1px solid rgba(245, 158, 11, 0.45);
+      background: rgba(245, 158, 11, 0.12);
+      margin-bottom: 12px;
+    }
+    .split-alert-title {
+      font-size: 0.82rem;
+      font-weight: 800;
+      color: #fde68a;
+      margin-bottom: 6px;
+    }
+    .split-item {
+      font-size: 0.74rem;
+      color: #fef3c7;
+      padding: 4px 0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .btn-split-exec {
+      margin-top: 8px;
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(245, 158, 11, 0.6);
+      background: #f59e0b;
+      color: #451a03;
+      font-size: 0.8rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    /* Inbox & History Rows */
+    .doc-item-card {
+      padding: 13px;
+      border-radius: 16px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(15, 23, 42, 0.75);
+      margin-bottom: 10px;
+    }
+    .doc-item-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+    .doc-orig-name {
+      font-size: 0.86rem;
+      font-weight: 800;
+      color: #f8fafc;
+      word-break: break-word;
+    }
+    .doc-meta-line {
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .doc-arrow-box {
+      padding: 9px 11px;
+      border-radius: 12px;
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px solid rgba(16, 185, 129, 0.28);
+      margin-bottom: 9px;
+      font-size: 0.76rem;
+    }
+    .doc-arrow-name {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-weight: 700;
+      color: #a7f3d0;
+      word-break: break-all;
+    }
+    .doc-arrow-folder {
+      color: #7dd3fc;
+      font-weight: 700;
+      margin-top: 3px;
+    }
+    .doc-actions-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn-sm {
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-elevated);
+      color: var(--text-main);
+      font-size: 0.76rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .btn-sm.primary {
+      background: var(--accent-emerald);
+      border-color: var(--accent-emerald);
+      color: #042f2e;
+      font-weight: 800;
+    }
+
+    /* Bottom Navigation Bar (Protected from iOS Home Indicator) */
+    .bottom-nav {
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: calc(12px + var(--safe-bottom));
+      width: min(94vw, 520px);
+      background: rgba(15, 23, 42, 0.94);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      border-radius: 22px;
+      padding: 6px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+      z-index: 600;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.65);
+    }
+    .nav-tab {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 3px;
+      padding: 8px 6px;
+      border-radius: 16px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      position: relative;
+    }
+    .nav-tab.active {
+      background: rgba(16, 185, 129, 0.18);
+      color: #a7f3d0;
+    }
+    .nav-badge {
+      position: absolute;
+      top: 4px;
+      right: 18px;
+      background: var(--accent-amber);
+      color: #451a03;
+      font-size: 0.64rem;
+      font-weight: 900;
+      padding: 1px 6px;
+      border-radius: 999px;
+    }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      top: calc(16px + var(--safe-top));
+      left: 50%;
+      transform: translateX(-50%) translateY(-20px);
+      background: rgba(15, 23, 42, 0.96);
+      border: 1px solid var(--accent-emerald);
+      color: #f8fafc;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      font-weight: 700;
+      z-index: 950;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.22s ease, transform 0.22s ease;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+      max-width: 92vw;
+      text-align: center;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .hidden {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <!-- Pull-to-refresh icon-only indicator -->
+  <div id="ptrIndicator" aria-hidden="true">
+    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <polyline points="21 3 21 9 15 9" />
+    </svg>
+  </div>
+
+  <div id="toast"></div>
+
+  <!-- Hidden File Inputs for iOS Camera & Photo/PDF Picker -->
+  <input id="iosCameraInput" type="file" accept="image/*" capture="environment" class="hidden" />
+  <input id="filePickerInput" type="file" accept="image/*,application/pdf" multiple class="hidden" />
+
+  <!-- Live Camera Viewfinder Modal -->
+  <div id="cameraModal">
+    <div class="cam-top-bar">
+      <button type="button" class="btn-sm" onclick="closeLiveCamera()">✕ Fermer</button>
+      <span id="camPageCounter" style="font-size:0.82rem;font-weight:800;color:#a7f3d0;">Cadrez la feuille A4</span>
+      <button type="button" id="torchBtn" class="btn-sm" onclick="toggleTorch()">🔦 Flash</button>
+    </div>
+    <div class="cam-viewport">
+      <video id="camVideo" autoplay playsinline muted></video>
+      <div class="cam-a4-guide">
+        <div class="cam-a4-label">Alignez les 4 bords du document</div>
+      </div>
+    </div>
+    <div class="cam-bottom-bar">
+      <button type="button" class="btn-sm" onclick="triggerNativeCameraFallback()">📱 Photo iOS HD</button>
+      <button type="button" class="shutter-btn" onclick="captureLiveFrame()" title="Capturer la page"></button>
+      <button type="button" class="btn-sm primary" onclick="finishLiveCamera()">Terminer ✓</button>
+    </div>
+  </div>
+
+  <div class="app-shell">
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="brand-left">
+        <img src="assets/icon.svg" alt="ScanDoc AI" class="brand-icon" />
+        <div class="brand-titles">
+          <h1>ScanDoc AI</h1>
+          <div class="brand-sub">Scanner iPhone → Mon Drive & Coffre-Fort</div>
+        </div>
+      </div>
+      <button type="button" id="tunnelStatusBtn" class="status-pill" onclick="discoverBackend(true)" title="Toucher pour rafraîchir la connexion au Mac">
+        <span class="status-dot"></span>
+        <span id="tunnelStatusText">Connexion Drive…</span>
+      </button>
+    </header>
+
+    <!-- ==================== TAB 1 : SCANNER & RANGER ==================== -->
+    <main id="tabScan">
+      <!-- Capture Hero Card -->
+      <section class="card">
+        <div class="section-title">
+          <span>📸 Numériser un document papier</span>
+          <span style="font-size:0.72rem;color:#10b981;font-weight:700;">Zéro filigrane • PDF Pro</span>
+        </div>
+
+        <div class="capture-grid">
+          <button type="button" class="btn-capture-main" onclick="document.getElementById('iosCameraInput').click()">
+            <span style="font-size:1.35rem;">📸</span>
+            <span>Scanner avec l'Appareil Photo iPhone</span>
+          </button>
+          <button type="button" class="btn-capture-sec" onclick="openLiveCamera()">
+            <span>🎥</span>
+            <span>Visée Live Multi-Pages</span>
+          </button>
+          <button type="button" class="btn-capture-sec" onclick="document.getElementById('filePickerInput').click()">
+            <span>📁</span>
+            <span>Importer Photo / PDF</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Active Scan Workspace (Hidden until at least 1 page is added) -->
+      <section id="scanWorkspace" class="card hidden">
+        <div class="section-title">
+          <span id="pagesCountTitle">📄 Pages scannées (1)</span>
+          <div style="display:flex;gap:6px;">
+            <button type="button" class="btn-sm" onclick="document.getElementById('iosCameraInput').click()">➕ Page</button>
+            <button type="button" class="btn-sm" onclick="clearCurrentScan()">🗑️ Vider</button>
+          </div>
+        </div>
+
+        <!-- Multi-page thumbnails strip -->
+        <div id="pagesStrip" class="pages-strip"></div>
+
+        <!-- Live Filter & Preview Canvas -->
+        <div id="previewStage" class="preview-stage">
+          <canvas id="previewCanvas"></canvas>
+        </div>
+
+        <div class="filter-bar">
+          <button type="button" class="filter-pill active" data-filter="magic" onclick="selectFilter('magic')">✨ Couleur Magique</button>
+          <button type="button" class="filter-pill" data-filter="bw" onclick="selectFilter('bw')">🖤 Noir & Blanc</button>
+          <button type="button" class="filter-pill" data-filter="gray" onclick="selectFilter('gray')">🩶 Gris Doux</button>
+          <button type="button" class="filter-pill" data-filter="original" onclick="selectFilter('original')">📷 Original</button>
+        </div>
+
+        <div class="toggle-row">
+          <label for="autocropToggle">📐 Redressement automatique des 4 coins (Apple Vision)</label>
+          <input type="checkbox" id="autocropToggle" checked onchange="reanalyzeCurrentScan()" />
+        </div>
+
+        <!-- AI Analysis Banner -->
+        <div id="aiBanner" class="ai-banner">
+          <span style="font-size:1.35rem;">🧠</span>
+          <div class="ai-banner-body">
+            <div id="aiDocType" class="ai-doc-type">Analyse OCR & IA en cours…</div>
+            <div id="aiDocSummary" class="ai-doc-summary">Détection de la date, de l'organisme émetteur et du dossier Mon Drive…</div>
+          </div>
+        </div>
+
+        <!-- Multi-Document Split Suggestion (if detected) -->
+        <div id="splitAlertBox" class="split-alert hidden"></div>
+
+        <!-- Smart Filename Selection -->
+        <label class="field-label">🏷️ Nom du fichier PDF proposé (1 tap ou modifiable)</label>
+        <div id="namePresetsList" class="name-presets"></div>
+
+        <input type="text" id="finalFilenameInput" class="text-input" placeholder="2026-11-14_Document.pdf" />
+
+        <div class="quick-chips">
+          <button type="button" class="chip" onclick="appendChipToName('Signe')">+ Signé</button>
+          <button type="button" class="chip" onclick="appendChipToName('Thomas_Lefevre')">+ Thomas</button>
+          <button type="button" class="chip" onclick="appendChipToName('Marie_Parizot')">+ Marie</button>
+          <button type="button" class="chip" onclick="appendChipToName('Cochin')">+ Cochin</button>
+          <button type="button" class="chip" onclick="appendChipToName('Facture')">+ Facture</button>
+          <button type="button" class="chip" onclick="appendChipToName('Attestation')">+ Attestation</button>
+        </div>
+
+        <!-- Smart Destination Folder Selection -->
+        <label class="field-label">📂 Dossier de destination dans Mon Drive (Google Drive)</label>
+        <div id="folderShortcutsGrid" class="folder-shortcuts"></div>
+
+        <select id="driveFolderSelect" class="select-input" onchange="onDriveFolderSelectChange()"></select>
+        <input type="text" id="newSubfolderInput" class="text-input" placeholder="➕ Optionnel : créer un nouveau sous-dossier (ex: Contrats 2026)" />
+
+        <!-- Optional Copy to AssurImpôts Vault -->
+        <div class="toggle-row">
+          <label for="vaultCopyToggle">🔐 Copier aussi dans le Coffre-Fort AssurImpôts & iCloud Drive</label>
+          <input type="checkbox" id="vaultCopyToggle" checked onchange="toggleVaultSelectVisibility()" />
+        </div>
+        <div id="vaultCategoryWrapper">
+          <select id="vaultCategorySelect" class="select-input"></select>
+        </div>
+
+        <!-- Primary Action CTA -->
+        <button type="button" id="btnSaveToDrive" class="btn-save-drive" onclick="saveCurrentScanToDrive()">
+          ✅ Renommer & Ranger dans Mon Drive
+        </button>
+
+        <button type="button" class="btn-share-ios" onclick="exportAndShareLocalPdf()">
+          📤 Exporter / Partager le PDF sur l'iPhone (Fichiers, Drive, AirDrop)
+        </button>
+      </section>
+    </main>
+
+    <!-- ==================== TAB 2 : À TRIER RACINE DU DRIVE ==================== -->
+    <section id="tabInbox" class="hidden">
+      <div class="card">
+        <div class="section-title">
+          <span>📥 Fichiers en vrac à la racine de Mon Drive</span>
+          <button type="button" id="btnFileAllInbox" class="btn-sm primary" onclick="fileAllInboxItems()">⚡ Tout ranger</button>
+        </div>
+        <p style="font-size:0.78rem;color:var(--text-muted);margin-bottom:12px;">
+          ScanDoc détecte automatiquement les PDF ou scans posés à la racine de <code>Mon Drive</code>, lit leur contenu par OCR Apple Vision et propose le bon nom et le bon sous-dossier.
+        </p>
+        <div id="inboxListContainer"></div>
+      </div>
+    </section>
+
+    <!-- ==================== TAB 3 : HISTORIQUE & PLAN DU DRIVE ==================== -->
+    <section id="tabHistory" class="hidden">
+      <div class="card">
+        <div class="section-title">
+          <span>🕘 Derniers documents scannés & rangés</span>
+        </div>
+        <div id="historyListContainer"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">
+          <span>🗺️ Architecture de Mon Drive (38 dossiers actifs)</span>
+        </div>
+        <div id="drivePlanContainer"></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav" aria-label="Navigation principale">
+    <button type="button" class="nav-tab active" data-tab="scan" onclick="switchTab('scan')">
+      <span style="font-size:1.15rem;">📸</span>
+      <span>Scanner</span>
+    </button>
+    <button type="button" class="nav-tab" data-tab="inbox" onclick="switchTab('inbox')">
+      <span style="font-size:1.15rem;">📥</span>
+      <span>À trier Drive</span>
+      <span id="inboxNavBadge" class="nav-badge hidden">0</span>
+    </button>
+    <button type="button" class="nav-tab" data-tab="history" onclick="switchTab('history')">
+      <span style="font-size:1.15rem;">🗂️</span>
+      <span>Mon Drive</span>
+    </button>
+  </nav>
+
+  <script>
+    // ==================== STATE & INITIALIZATION ====================
+    const embedded = window.SCANDOC_EMBEDDED_DATA || {};
+    let driveFolders = embedded.driveFolders || [];
+    let vaultCategories = embedded.vaultCategories || [];
+    let inboxItems = embedded.inboxItems || [];
+    let historyItems = embedded.historyItems || [];
+
+    let apiBaseUrl = "";
+    let backendOnline = false;
+    let activeTab = "scan";
+
+    // Current scan session state
+    let scannedPages = []; // [{ id, origDataUrl, processedDataUrl, rotation, isPdf, fileName }]
+    let selectedPageIndex = 0;
+    let currentFilter = "magic";
+    let currentScanId = "";
+    let lastAnalysis = null;
+    let liveStream = null;
+    let torchEnabled = false;
+
+    const SHORTCUT_FOLDERS = [
+      { path: "04 - Administratif & carrière/Poste assistant Cochin", emoji: "🏥", short: "Poste Assistant Cochin" },
+      { path: "04 - Administratif & carrière/Identité & banque", emoji: "🪪", short: "Identité, Banque & Impôts" },
+      { path: "01 - Cochin (en cours)/Interventions", emoji: "💉", short: "Cochin — Interventions RI" },
+      { path: "05 - Perso & famille/Projet appartement", emoji: "🏠", short: "Appartement & Travaux" },
+      { path: "05 - Perso & famille", emoji: "👨‍👩‍👦", short: "Perso, Marie & Émile" },
+      { path: "04 - Administratif & carrière/Cartes Avantage SNCF", emoji: "🚄", short: "SNCF & Voyages" }
+    ];
+
+    function showToast(msg) {
+      const el = document.getElementById("toast");
+      el.textContent = msg;
+      el.classList.add("show");
+      clearTimeout(window._toastTimer);
+      window._toastTimer = setTimeout(() => el.classList.remove("show"), 3200);
+    }
+
+    function escapeHtml(str) {
+      return String(str || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    // ==================== BACKEND & TUNNEL DISCOVERY ====================
+    async function probeBackend(url, timeoutMs = 2800) {
+      const ctrl = new AbortController();
+      const tid = setTimeout(() => ctrl.abort(), timeoutMs);
+      try {
+        const clean = url.replace(/\/$/, "");
+        const res = await fetch(`${clean}/api/status?t=${Date.now()}`, { cache: "no-store", signal: ctrl.signal });
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data && data.ok ? { baseUrl: clean, status: data } : null;
+      } catch (_) {
+        return null;
+      } finally {
+        clearTimeout(tid);
+      }
+    }
+
+    async function discoverBackend(manual = false) {
+      const btn = document.getElementById("tunnelStatusBtn");
+      const txt = document.getElementById("tunnelStatusText");
+      txt.textContent = "Connexion…";
+
+      const candidates = [];
+      if (location.port === "8794" || location.hostname.endsWith(".trycloudflare.com")) {
+        candidates.push(location.origin);
+      }
+      candidates.push("http://127.0.0.1:8794");
+
+      const epUrls = [
+        `./endpoint.json?t=${Date.now()}`,
+        `https://raw.githubusercontent.com/Mrthomaslef/scan-doc/main/endpoint.json?t=${Date.now()}`
+      ];
+      for (const u of epUrls) {
+        try {
+          const r = await fetch(u, { cache: "no-store" });
+          if (r.ok) {
+            const ep = await r.json();
+            if (ep && ep.tunnelUrl) candidates.push(ep.tunnelUrl);
+          }
+        } catch (_) {}
+      }
+
+      for (const cand of [...new Set(candidates.filter(Boolean))]) {
+        const hit = await probeBackend(cand);
+        if (hit) {
+          apiBaseUrl = hit.baseUrl;
+          backendOnline = true;
+          btn.classList.remove("offline");
+          btn.classList.add("online");
+          txt.textContent = "Mon Drive Connecté";
+          await refreshLiveCatalogAndInbox();
+          if (manual) showToast("🟢 Connecté en direct à Mon Drive sur le Mac");
+          return;
+        }
+      }
+
+      backendOnline = false;
+      btn.classList.remove("online");
+      btn.classList.add("offline");
+      txt.textContent = "Mode Autonome iPhone";
+      if (manual) showToast("📱 Mode Autonome iPhone actif (Export PDF & Partage Drive iOS)");
+    }
+
+    async function refreshLiveCatalogAndInbox() {
+      if (!backendOnline || !apiBaseUrl) return;
+      try {
+        const [fRes, iRes, hRes] = await Promise.all([
+          fetch(`${apiBaseUrl}/api/folders?t=${Date.now()}`),
+          fetch(`${apiBaseUrl}/api/inbox?t=${Date.now()}`),
+          fetch(`${apiBaseUrl}/api/history?t=${Date.now()}`)
+        ]);
+        if (fRes.ok) {
+          const fData = await fRes.json();
+          if (fData.driveFolders) driveFolders = fData.driveFolders;
+          if (fData.vaultCategories) vaultCategories = fData.vaultCategories;
+          populateFolderSelects();
+        }
+        if (iRes.ok) {
+          const iData = await iRes.json();
+          if (Array.isArray(iData.items)) inboxItems = iData.items;
+          updateInboxBadge();
+          renderInboxTab();
+        }
+        if (hRes.ok) {
+          const hData = await hRes.json();
+          if (Array.isArray(hData.items)) historyItems = hData.items;
+          renderHistoryTab();
+        }
+      } catch (_) {}
+    }
+
+    // ==================== NAVIGATION & SELECTS ====================
+    function switchTab(tab) {
+      activeTab = tab;
+      document.getElementById("tabScan").classList.toggle("hidden", tab !== "scan");
+      document.getElementById("tabInbox").classList.toggle("hidden", tab !== "inbox");
+      document.getElementById("tabHistory").classList.toggle("hidden", tab !== "history");
+      document.querySelectorAll(".nav-tab").forEach((b) => {
+        b.classList.toggle("active", b.dataset.tab === tab);
+      });
+      if (tab === "inbox") renderInboxTab();
+      if (tab === "history") renderHistoryTab();
+    }
+
+    function updateInboxBadge() {
+      const badge = document.getElementById("inboxNavBadge");
+      if (inboxItems.length > 0) {
+        badge.textContent = String(inboxItems.length);
+        badge.classList.remove("hidden");
+      } else {
+        badge.classList.add("hidden");
+      }
+    }
+
+    function populateFolderSelects() {
+      const sel = document.getElementById("driveFolderSelect");
+      const currentVal = sel.value || "04 - Administratif & carrière/Poste assistant Cochin";
+      sel.innerHTML = driveFolders.map((f) =>
+        `<option value="${escapeHtml(f.path)}">${escapeHtml(f.emoji || "📁")} ${escapeHtml(f.path)}</option>`
+      ).join("");
+      if ([...sel.options].some((o) => o.value === currentVal)) {
+        sel.value = currentVal;
+      }
+
+      const vSel = document.getElementById("vaultCategorySelect");
+      vSel.innerHTML = vaultCategories.map((v) =>
+        `<option value="${escapeHtml(v.id)}">${escapeHtml(v.emoji)} ${escapeHtml(v.label)}</option>`
+      ).join("");
+
+      renderFolderShortcuts();
+      renderDrivePlan();
+    }
+
+    function renderFolderShortcuts() {
+      const grid = document.getElementById("folderShortcutsGrid");
+      const activeFolder = document.getElementById("driveFolderSelect").value;
+      grid.innerHTML = SHORTCUT_FOLDERS.map((sf) => {
+        const isAct = sf.path === activeFolder;
+        return `
+          <button type="button" class="folder-tile ${isAct ? "active" : ""}" onclick="selectDriveFolder('${escapeHtml(sf.path)}')">
+            <span style="font-size:1.1rem;">${sf.emoji}</span>
+            <span class="f-txt">${escapeHtml(sf.short)}</span>
+          </button>
+        `;
+      }).join("");
+    }
+
+    function selectDriveFolder(folderPath) {
+      const sel = document.getElementById("driveFolderSelect");
+      if (![...sel.options].some((o) => o.value === folderPath)) {
+        const opt = document.createElement("option");
+        opt.value = folderPath;
+        opt.textContent = "📁 " + folderPath;
+        sel.appendChild(opt);
+      }
+      sel.value = folderPath;
+      renderFolderShortcuts();
+    }
+
+    function onDriveFolderSelectChange() {
+      renderFolderShortcuts();
+    }
+
+    function toggleVaultSelectVisibility() {
+      const checked = document.getElementById("vaultCopyToggle").checked;
+      document.getElementById("vaultCategoryWrapper").classList.toggle("hidden", !checked);
+    }
+
+    // ==================== CAMERA & FILE CAPTURE ====================
+    document.getElementById("iosCameraInput").addEventListener("change", async (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        await ingestFiles(Array.from(e.target.files));
+        e.target.value = "";
+      }
+    });
+
+    document.getElementById("filePickerInput").addEventListener("change", async (e) => {
+      if (e.target.files && e.target.files.length > 0) {
+        await ingestFiles(Array.from(e.target.files));
+        e.target.value = "";
+      }
+    });
+
+    async function openLiveCamera() {
+      const modal = document.getElementById("cameraModal");
+      const video = document.getElementById("camVideo");
+      try {
+        liveStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 2560 },
+            height: { ideal: 1920 }
+          },
+          audio: false
+        });
+        video.srcObject = liveStream;
+        modal.classList.add("open");
+        updateCamCounter();
+      } catch (_) {
+        // Fallback immediately to native iOS Camera
+        document.getElementById("iosCameraInput").click();
+      }
+    }
+
+    function triggerNativeCameraFallback() {
+      closeLiveCamera();
+      document.getElementById("iosCameraInput").click();
+    }
+
+    function closeLiveCamera() {
+      const modal = document.getElementById("cameraModal");
+      modal.classList.remove("open");
+      if (liveStream) {
+        liveStream.getTracks().forEach((t) => t.stop());
+        liveStream = null;
+      }
+      torchEnabled = false;
+    }
+
+    async function toggleTorch() {
+      if (!liveStream) return;
+      const track = liveStream.getVideoTracks()[0];
+      if (!track) return;
+      try {
+        torchEnabled = !torchEnabled;
+        await track.applyConstraints({ advanced: [{ torch: torchEnabled }] });
+        showToast(torchEnabled ? "🔦 Flash activé" : "🔦 Flash désactivé");
+      } catch (_) {
+        showToast("Flash géré automatiquement par l'iPhone");
+      }
+    }
+
+    function updateCamCounter() {
+      const el = document.getElementById("camPageCounter");
+      el.textContent = scannedPages.length > 0
+        ? `${scannedPages.length} page(s) capturée(s) — Prêt pour la suivante`
+        : "Cadrez la feuille A4";
+    }
+
+    async function captureLiveFrame() {
+      const video = document.getElementById("camVideo");
+      if (!video.videoWidth) return;
+      const c = document.createElement("canvas");
+      c.width = video.videoWidth;
+      c.height = video.videoHeight;
+      const ctx = c.getContext("2d");
+      ctx.drawImage(video, 0, 0, c.width, c.height);
+      const dataUrl = c.toDataURL("image/jpeg", 0.92);
+      await addImagePage(dataUrl, `Scan_Page_${scannedPages.length + 1}.jpg`);
+      updateCamCounter();
+      showToast(`📸 Page ${scannedPages.length} capturée !`);
+    }
+
+    async function finishLiveCamera() {
+      closeLiveCamera();
+      if (scannedPages.length > 0) {
+        await reanalyzeCurrentScan();
+      }
+    }
+
+    // ==================== IMAGE PROCESSING & CANVAS FILTERS ====================
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function normalizeAndFilterImage(dataUrl, filterMode, rotationDeg = 0) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxDim = 2000;
+          let w = img.width;
+          let h = img.height;
+          if (Math.max(w, h) > maxDim) {
+            const scale = maxDim / Math.max(w, h);
+            w = Math.round(w * scale);
+            h = Math.round(h * scale);
+          }
+
+          const canvas = document.createElement("canvas");
+          const rot = ((rotationDeg % 360) + 360) % 360;
+          if (rot === 90 || rot === 270) {
+            canvas.width = h;
+            canvas.height = w;
+          } else {
+            canvas.width = w;
+            canvas.height = h;
+          }
+
+          const ctx = canvas.getContext("2d");
+          ctx.save();
+          ctx.translate(canvas.width / 2, canvas.height / 2);
+          ctx.rotate((rot * Math.PI) / 180);
+          ctx.drawImage(img, -w / 2, -h / 2, w, h);
+          ctx.restore();
+
+          if (filterMode !== "original") {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const d = imgData.data;
+            for (let i = 0; i < d.length; i += 4) {
+              let r = d[i], g = d[i + 1], b = d[i + 2];
+              if (filterMode === "magic") {
+                // Boost paper whiteness while keeping blue/colored ink crisp
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                const factor = lum > 175 ? 1.18 : 1.32;
+                r = Math.min(255, Math.max(0, (r - 128) * factor + 142));
+                g = Math.min(255, Math.max(0, (g - 128) * factor + 142));
+                b = Math.min(255, Math.max(0, (b - 128) * factor + 142));
+              } else if (filterMode === "bw") {
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                const v = lum > 158 ? Math.min(255, lum * 1.15) : Math.max(0, (lum - 128) * 1.85 + 110);
+                r = g = b = v;
+              } else if (filterMode === "gray") {
+                const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+                const v = Math.min(255, Math.max(0, (lum - 128) * 1.22 + 132));
+                r = g = b = v;
+              }
+              d[i] = r;
+              d[i + 1] = g;
+              d[i + 2] = b;
+            }
+            ctx.putImageData(imgData, 0, 0);
+          }
+
+          resolve(canvas.toDataURL("image/jpeg", 0.88));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
+      });
+    }
+
+    async function addImagePage(dataUrl, fileName, isPdf = false) {
+      const processed = isPdf ? dataUrl : await normalizeAndFilterImage(dataUrl, currentFilter, 0);
+      scannedPages.push({
+        id: "p_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+        origDataUrl: dataUrl,
+        processedDataUrl: processed,
+        rotation: 0,
+        isPdf,
+        fileName: fileName || `Page_${scannedPages.length + 1}.jpg`
+      });
+      selectedPageIndex = scannedPages.length - 1;
+      document.getElementById("scanWorkspace").classList.remove("hidden");
+      renderPagesStrip();
+      renderPreviewCanvas();
+    }
+
+    async function ingestFiles(files) {
+      for (const file of files) {
+        const durl = await readFileAsDataUrl(file);
+        const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+        await addImagePage(durl, file.name, isPdf);
+      }
+      await reanalyzeCurrentScan();
+    }
+
+    function renderPagesStrip() {
+      const strip = document.getElementById("pagesStrip");
+      document.getElementById("pagesCountTitle").textContent = `📄 Pages scannées (${scannedPages.length})`;
+      strip.innerHTML = scannedPages.map((p, idx) => `
+        <div class="page-thumb-card ${idx === selectedPageIndex ? "active" : ""}" onclick="selectPage(${idx})">
+          <span class="page-thumb-badge">P.${idx + 1}</span>
+          <button type="button" class="page-thumb-del" onclick="event.stopPropagation();removePage(${idx})" title="Supprimer cette page">✕</button>
+          ${p.isPdf
+            ? `<div style="height:124px;display:flex;align-items:center;justify-content:center;font-size:2rem;background:#1e293b;">📕</div>`
+            : `<img src="${p.processedDataUrl}" alt="Page ${idx + 1}" />`
+          }
+          <div class="page-thumb-actions">
+            <button type="button" class="page-mini-btn" onclick="event.stopPropagation();rotatePage(${idx}, -90)" title="Pivoter à gauche">↺</button>
+            <button type="button" class="page-mini-btn" onclick="event.stopPropagation();rotatePage(${idx}, 90)" title="Pivoter à droite">↻</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function selectPage(idx) {
+      selectedPageIndex = idx;
+      renderPagesStrip();
+      renderPreviewCanvas();
+    }
+
+    async function rotatePage(idx, deltaDeg) {
+      const p = scannedPages[idx];
+      if (!p || p.isPdf) return;
+      p.rotation = (p.rotation + deltaDeg) % 360;
+      p.processedDataUrl = await normalizeAndFilterImage(p.origDataUrl, currentFilter, p.rotation);
+      renderPagesStrip();
+      renderPreviewCanvas();
+      await reanalyzeCurrentScan();
+    }
+
+    async function removePage(idx) {
+      scannedPages.splice(idx, 1);
+      if (scannedPages.length === 0) {
+        clearCurrentScan();
+        return;
+      }
+      selectedPageIndex = Math.max(0, Math.min(selectedPageIndex, scannedPages.length - 1));
+      renderPagesStrip();
+      renderPreviewCanvas();
+      await reanalyzeCurrentScan();
+    }
+
+    function clearCurrentScan() {
+      scannedPages = [];
+      selectedPageIndex = 0;
+      currentScanId = "";
+      lastAnalysis = null;
+      document.getElementById("scanWorkspace").classList.add("hidden");
+    }
+
+    function renderPreviewCanvas() {
+      const stage = document.getElementById("previewStage");
+      const canvas = document.getElementById("previewCanvas");
+      const p = scannedPages[selectedPageIndex];
+      if (!p) return;
+      if (p.isPdf) {
+        stage.classList.add("hidden");
+        return;
+      }
+      stage.classList.remove("hidden");
+      const img = new Image();
+      img.onload = () => {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0);
+      };
+      img.src = p.processedDataUrl;
+    }
+
+    async function selectFilter(mode) {
+      currentFilter = mode;
+      document.querySelectorAll(".filter-pill").forEach((b) => {
+        b.classList.toggle("active", b.dataset.filter === mode);
+      });
+      for (const p of scannedPages) {
+        if (!p.isPdf) {
+          p.processedDataUrl = await normalizeAndFilterImage(p.origDataUrl, currentFilter, p.rotation);
+        }
+      }
+      renderPagesStrip();
+      renderPreviewCanvas();
+      await reanalyzeCurrentScan();
+    }
+
+    // ==================== AI OCR ANALYSIS & SMART NAMING ====================
+    function localFallbackAnalysis(firstFileName) {
+      const today = new Date().toISOString().slice(0, 10);
+      const mmyy = today.slice(5, 7) + today.slice(2, 4);
+      const cleanStem = (firstFileName || "Document_Scanne")
+        .replace(/\.[^.]+$/, "")
+        .replace(/[^a-zA-Z0-9_-]+/g, "_");
+      return {
+        docType: "Document Papier Numérisé",
+        docDate: today,
+        issuer: "Scan iPhone",
+        person: "Thomas Lefèvre",
+        isSigned: true,
+        summary: `${scannedPages.length} page(s) prête(s) en PDF haute netteté sans filigrane.`,
+        suggestedNames: [
+          { id: "standard", label: "Chronologique (Recommandé)", filename: `${today}_${cleanStem}_Thomas_Lefevre.pdf` },
+          { id: "official", label: "Officiel Administratif", filename: `LE_FEVRE_THOMAS_${cleanStem.toUpperCase()}_${mmyy}.pdf` },
+          { id: "readable", label: "Clair & Lisible", filename: `${cleanStem.replace(/_/g, " ")} — Thomas Lefèvre (${today}).pdf` }
+        ],
+        recommendedFolder: "04 - Administratif & carrière/Poste assistant Cochin",
+        vaultCategory: "02_Carriere_Medicale_APHP_Diplomes",
+        recommendVaultCopy: true,
+        splitSuggestions: []
+      };
+    }
+
+    async function reanalyzeCurrentScan() {
+      if (scannedPages.length === 0) return;
+      const typeEl = document.getElementById("aiDocType");
+      const sumEl = document.getElementById("aiDocSummary");
+      typeEl.textContent = "⏳ Lecture OCR Apple Vision & Analyse IA en cours…";
+      sumEl.textContent = "Extraction du titre, de la date du document et du meilleur dossier Mon Drive…";
+
+      const firstFileName = scannedPages[0].fileName || "Scan.jpg";
+      const autocrop = document.getElementById("autocropToggle").checked;
+
+      if (backendOnline && apiBaseUrl) {
+        try {
+          const payload = {
+            scanId: currentScanId || `scan_${Date.now()}`,
+            filter: currentFilter,
+            autocrop,
+            originalFilename: firstFileName,
+            images: scannedPages.map((p) => p.isPdf ? p.origDataUrl : p.processedDataUrl)
+          };
+          const res = await fetch(`${apiBaseUrl}/api/analyze`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.ok && data.analysis) {
+              currentScanId = data.scanId;
+              applyAnalysisToForm(data.analysis, data.sizeKb);
+              return;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Fallback offline analysis
+      const fallback = localFallbackAnalysis(firstFileName);
+      applyAnalysisToForm(fallback, null);
+    }
+
+    function applyAnalysisToForm(analysis, sizeKb) {
+      lastAnalysis = analysis;
+      const sizeTxt = sizeKb ? ` • PDF ${sizeKb} Ko` : "";
+      document.getElementById("aiDocType").textContent = `✨ ${analysis.docType} (${analysis.docDate}${sizeTxt})`;
+      document.getElementById("aiDocSummary").textContent = `${analysis.summary} [${analysis.aiEngine || "IA Locale"}]`;
+
+      const presetsEl = document.getElementById("namePresetsList");
+      const names = analysis.suggestedNames || [];
+      presetsEl.innerHTML = names.map((n, idx) => `
+        <button type="button" class="preset-option ${idx === 0 ? "active" : ""}" onclick="selectPresetName(${idx}, '${escapeHtml(n.filename)}')">
+          <div>
+            <span class="preset-tag">${escapeHtml(n.label)}</span>
+            <span class="preset-filename">${escapeHtml(n.filename)}</span>
+          </div>
+          <span style="color:var(--accent-sky);font-weight:800;">Choisir</span>
+        </button>
+      `).join("");
+
+      if (names.length > 0) {
+        document.getElementById("finalFilenameInput").value = names[0].filename;
+      }
+
+      if (analysis.recommendedFolder) {
+        selectDriveFolder(analysis.recommendedFolder);
+      }
+
+      const vaultCheck = document.getElementById("vaultCopyToggle");
+      vaultCheck.checked = Boolean(analysis.recommendVaultCopy);
+      if (analysis.vaultCategory) {
+        document.getElementById("vaultCategorySelect").value = analysis.vaultCategory;
+      }
+      toggleVaultSelectVisibility();
+
+      // Render Multi-Doc Split Alert if applicable
+      const splitBox = document.getElementById("splitAlertBox");
+      const splits = analysis.splitSuggestions || [];
+      if (splits.length >= 2) {
+        splitBox.classList.remove("hidden");
+        splitBox.innerHTML = `
+          <div class="split-alert-title">✂️ ${splits.length} documents distincts détectés dans ce scan multi-pages :</div>
+          ${splits.map((s) => `
+            <div class="split-item">• Page(s) ${s.pages.join(", ")} → <strong>${escapeHtml(s.filename)}</strong> (${escapeHtml(s.folder)})</div>
+          `).join("")}
+          <button type="button" class="btn-split-exec" onclick="splitAndSaveCurrentScan()">
+            ⚡ Séparer et ranger les ${splits.length} PDF automatiquement dans Mon Drive
+          </button>
+        `;
+      } else {
+        splitBox.classList.add("hidden");
+      }
+    }
+
+    function selectPresetName(idx, filename) {
+      document.getElementById("finalFilenameInput").value = filename;
+      document.querySelectorAll("#namePresetsList .preset-option").forEach((el, i) => {
+        el.classList.toggle("active", i === idx);
+      });
+    }
+
+    function appendChipToName(tag) {
+      const inp = document.getElementById("finalFilenameInput");
+      let val = inp.value.trim();
+      if (val.toLowerCase().endsWith(".pdf")) val = val.slice(0, -4);
+      if (!val.toLowerCase().includes(tag.toLowerCase())) {
+        val = `${val}_${tag}`;
+      }
+      inp.value = `${val}.pdf`;
+    }
+
+    // ==================== SAVE TO GOOGLE DRIVE & LOCAL PDF EXPORT ====================
+    async function saveCurrentScanToDrive() {
+      if (scannedPages.length === 0) return;
+      const btn = document.getElementById("btnSaveToDrive");
+      const filename = document.getElementById("finalFilenameInput").value.trim() || "Document_Scanne.pdf";
+      const driveFolder = document.getElementById("driveFolderSelect").value;
+      const newSubfolder = document.getElementById("newSubfolderInput").value.trim();
+      const copyToVault = document.getElementById("vaultCopyToggle").checked;
+      const vaultCategory = document.getElementById("vaultCategorySelect").value;
+
+      if (!backendOnline || !apiBaseUrl) {
+        await discoverBackend(false);
+      }
+
+      if (backendOnline && apiBaseUrl) {
+        btn.disabled = true;
+        btn.textContent = "⏳ Enregistrement dans Mon Drive…";
+        try {
+          const res = await fetch(`${apiBaseUrl}/api/save`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              scanId: currentScanId,
+              filename,
+              driveFolder,
+              newSubfolder,
+              copyToVault,
+              vaultCategory,
+              filter: currentFilter,
+              autocrop: document.getElementById("autocropToggle").checked,
+              docType: lastAnalysis ? lastAnalysis.docType : "Document scanné",
+              docDate: lastAnalysis ? lastAnalysis.docDate : new Date().toISOString().slice(0, 10),
+              summary: lastAnalysis ? lastAnalysis.summary : "",
+              images: scannedPages.map((p) => p.isPdf ? p.origDataUrl : p.processedDataUrl)
+            })
+          });
+          const data = await res.json();
+          if (res.ok && data.ok) {
+            showToast(`✅ Rangé dans Mon Drive : ${data.record.driveRelPath}`);
+            clearCurrentScan();
+            await refreshLiveCatalogAndInbox();
+            switchTab("history");
+            return;
+          } else {
+            showToast(`⚠️ ${data.error || "Erreur lors de l'enregistrement"}`);
+          }
+        } catch (_) {
+          showToast("📱 Mac non joignable : ouverture du partage PDF iPhone…");
+          await exportAndShareLocalPdf();
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "✅ Renommer & Ranger dans Mon Drive";
+        }
+      } else {
+        await exportAndShareLocalPdf();
+      }
+    }
+
+    async function splitAndSaveCurrentScan() {
+      if (!lastAnalysis || !lastAnalysis.splitSuggestions || !backendOnline) return;
+      try {
+        const res = await fetch(`${apiBaseUrl}/api/split-save`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            scanId: currentScanId,
+            splits: lastAnalysis.splitSuggestions
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          showToast(`✅ ${data.saved.length} PDF séparés et rangés dans Mon Drive !`);
+          clearCurrentScan();
+          await refreshLiveCatalogAndInbox();
+          switchTab("history");
+        }
+      } catch (_) {
+        showToast("⚠️ Erreur lors de la séparation des PDF");
+      }
+    }
+
+    // Minimal pure-JS multi-page JPEG-to-PDF builder for 100% offline iPhone export (zero watermark!)
+    function buildPdfBlobFromJpegDataUrls(jpegDataUrls) {
+      const pages = jpegDataUrls.map((durl) => {
+        const b64 = durl.split(",")[1];
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        return bytes;
+      });
+
+      const chunks = [];
+      const offsets = [];
+      let byteLen = 0;
+      const pushStr = (s) => {
+        const arr = new TextEncoder().encode(s);
+        chunks.push(arr);
+        byteLen += arr.length;
+      };
+      const pushBytes = (b) => {
+        chunks.push(b);
+        byteLen += b.length;
+      };
+      const startObj = (id) => {
+        offsets[id] = byteLen;
+        pushStr(`${id} 0 obj\n`);
+      };
+
+      pushStr("%PDF-1.4\n%\xFF\xFF\xFF\xFF\n");
+      startObj(1);
+      pushStr("<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+
+      const pageObjIds = pages.map((_, idx) => 3 + idx * 3);
+      startObj(2);
+      pushStr(`<< /Type /Pages /Kids [${pageObjIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>\nendobj\n`);
+
+      pages.forEach((jpegBytes, idx) => {
+        const pageId = 3 + idx * 3;
+        const imgId = pageId + 1;
+        const contentId = pageId + 2;
+
+        startObj(pageId);
+        pushStr(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /XObject << /Im0 ${imgId} 0 R >> >> /Contents ${contentId} 0 R >>\nendobj\n`);
+
+        // Parse JPEG SOF0 dimensions or default to 1200x1600
+        let imgW = 1200, imgH = 1600;
+        for (let i = 0; i < jpegBytes.length - 9; i++) {
+          if (jpegBytes[i] === 0xFF && (jpegBytes[i + 1] === 0xC0 || jpegBytes[i + 1] === 0xC2)) {
+            imgH = (jpegBytes[i + 5] << 8) | jpegBytes[i + 6];
+            imgW = (jpegBytes[i + 7] << 8) | jpegBytes[i + 8];
+            break;
+          }
+        }
+
+        startObj(imgId);
+        pushStr(`<< /Type /XObject /Subtype /Image /Width ${imgW} /Height ${imgH} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpegBytes.length} >>\nstream\n`);
+        pushBytes(jpegBytes);
+        pushStr("\nendstream\nendobj\n");
+
+        const streamCmd = "q 595 0 0 842 0 0 cm /Im0 Do Q\n";
+        startObj(contentId);
+        pushStr(`<< /Length ${streamCmd.length} >>\nstream\n${streamCmd}endstream\nendobj\n`);
+      });
+
+      const totalObjs = 3 + pages.length * 3;
+      const xrefOffset = byteLen;
+      pushStr(`xref\n0 ${totalObjs}\n0000000000 65535 f \n`);
+      for (let i = 1; i < totalObjs; i++) {
+        pushStr(`${String(offsets[i] || 0).padStart(10, "0")} 00000 n \n`);
+      }
+      pushStr(`trailer\n<< /Size ${totalObjs} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`);
+      return new Blob(chunks, { type: "application/pdf" });
+    }
+
+    async function exportAndShareLocalPdf() {
+      if (scannedPages.length === 0) return;
+      const filename = document.getElementById("finalFilenameInput").value.trim() || "Document_Scanne.pdf";
+      let pdfBlob = null;
+
+      if (backendOnline && apiBaseUrl && currentScanId) {
+        try {
+          const r = await fetch(`${apiBaseUrl}/api/staging?id=${encodeURIComponent(currentScanId)}`);
+          if (r.ok) pdfBlob = await r.blob();
+        } catch (_) {}
+      }
+
+      if (!pdfBlob) {
+        const jpegs = scannedPages.filter((p) => !p.isPdf).map((p) => p.processedDataUrl);
+        if (jpegs.length > 0) {
+          pdfBlob = buildPdfBlobFromJpegDataUrls(jpegs);
+        }
+      }
+
+      if (!pdfBlob) {
+        showToast("⚠️ Aucun aperçu PDF disponible");
+        return;
+      }
+
+      const fileObj = new File([pdfBlob], filename, { type: "application/pdf" });
+      if (navigator.canShare && navigator.canShare({ files: [fileObj] })) {
+        try {
+          await navigator.share({
+            files: [fileObj],
+            title: filename,
+            text: `Classer dans Mon Drive : ${document.getElementById("driveFolderSelect").value}`
+          });
+          showToast("✅ PDF partagé depuis l'iPhone !");
+          return;
+        } catch (_) {}
+      }
+
+      // Direct download fallback
+      const url = URL.createObjectURL(pdfBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast(`⬇️ ${filename} téléchargé !`);
+    }
+
+    // ==================== TAB 2 : INBOX RACINE DU DRIVE ====================
+    function renderInboxTab() {
+      const container = document.getElementById("inboxListContainer");
+      const btnAll = document.getElementById("btnFileAllInbox");
+      if (!inboxItems || inboxItems.length === 0) {
+        btnAll.classList.add("hidden");
+        container.innerHTML = `
+          <div style="text-align:center;padding:26px 12px;color:var(--text-muted);font-size:0.86rem;">
+            ✨ Aucun fichier en vrac à la racine de <strong>Mon Drive</strong> !<br/>Tout est parfaitement rangé.
+          </div>
+        `;
+        return;
+      }
+      btnAll.classList.remove("hidden");
+      btnAll.textContent = `⚡ Tout ranger (${inboxItems.length})`;
+
+      container.innerHTML = inboxItems.map((item, idx) => {
+        const a = item.analysis || {};
+        const recName = (a.suggestedNames && a.suggestedNames[0]) ? a.suggestedNames[0].filename : item.name;
+        const offName = (a.suggestedNames && a.suggestedNames[1]) ? a.suggestedNames[1].filename : item.name;
+        const folder = a.recommendedFolder || "04 - Administratif & carrière/Poste assistant Cochin";
+        const fileUrl = backendOnline && apiBaseUrl
+          ? `${apiBaseUrl}/api/file?path=${encodeURIComponent(item.name)}`
+          : "#";
+        const splits = a.splitSuggestions || [];
+
+        return `
+          <div class="doc-item-card">
+            <div class="doc-item-top">
+              <div>
+                <div class="doc-orig-name">📕 ${escapeHtml(item.name)}</div>
+                <div class="doc-meta-line">
+                  ${item.pageCount || 1} page(s) • ${item.sizeKb} Ko • Modifié le ${escapeHtml(item.modifiedAt)}
+                </div>
+              </div>
+              <span style="font-size:0.7rem;font-weight:800;padding:3px 8px;border-radius:999px;background:rgba(245,158,11,0.16);color:#fde68a;">À ranger</span>
+            </div>
+
+            <div class="doc-arrow-box">
+              <div style="font-size:0.72rem;color:#cbd5e1;margin-bottom:3px;">✨ <strong>${escapeHtml(a.docType || "Document")}</strong> — ${escapeHtml(a.summary || "")}</div>
+              <div class="doc-arrow-name">🏷️ ${escapeHtml(recName)}</div>
+              <div class="doc-arrow-folder">📂 Mon Drive › ${escapeHtml(folder)}</div>
+            </div>
+
+            ${splits.length >= 2 ? `
+              <div class="split-alert" style="margin-bottom:9px;">
+                <div class="split-alert-title">✂️ Contient ${splits.length} contrats distincts (ISPE + ASH) :</div>
+                ${splits.map((s) => `<div class="split-item">• P.${s.pages.join(",")} → ${escapeHtml(s.filename)}</div>`).join("")}
+                <button type="button" class="btn-split-exec" onclick="splitInboxItem(${idx})">
+                  ✂️ Séparer en ${splits.length} PDF & Archiver l'original
+                </button>
+              </div>
+            ` : ""}
+
+            <div class="doc-actions-row">
+              <button type="button" class="btn-sm primary" onclick="fileSingleInboxItem(${idx}, false)">
+                ✅ Ranger (Nom Chrono)
+              </button>
+              <button type="button" class="btn-sm" onclick="fileSingleInboxItem(${idx}, true)">
+                🏛️ Ranger (${escapeHtml(offName)})
+              </button>
+              ${backendOnline ? `<a href="${fileUrl}" target="_blank" rel="noopener" class="btn-sm">👁️ Voir PDF</a>` : ""}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function fileSingleInboxItem(idx, useOfficialName = false) {
+      const item = inboxItems[idx];
+      if (!item) return;
+      if (!backendOnline || !apiBaseUrl) {
+        showToast("⚠️ Connexion au Mac requise pour déplacer un fichier du Drive");
+        return;
+      }
+      const a = item.analysis || {};
+      const names = a.suggestedNames || [];
+      const chosenName = useOfficialName && names[1]
+        ? names[1].filename
+        : (names[0] ? names[0].filename : item.name);
+
+      try {
+        const res = await fetch(`${apiBaseUrl}/api/inbox/file`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sourceName: item.name,
+            filename: chosenName,
+            driveFolder: a.recommendedFolder || "04 - Administratif & carrière/Poste assistant Cochin",
+            copyToVault: Boolean(a.recommendVaultCopy),
+            vaultCategory: a.vaultCategory || "02_Carriere_Medicale_APHP_Diplomes",
+            docType: a.docType || "Document Drive",
+            docDate: a.docDate || new Date().toISOString().slice(0, 10),
+            summary: a.summary || ""
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          showToast(`✅ Rangé : ${data.record.driveRelPath}`);
+          await refreshLiveCatalogAndInbox();
+        } else {
+          showToast(`⚠️ ${data.error || "Erreur"}`);
+        }
+      } catch (_) {
+        showToast("⚠️ Erreur réseau");
+      }
+    }
+
+    async function splitInboxItem(idx) {
+      const item = inboxItems[idx];
+      if (!item || !item.analysis || !item.analysis.splitSuggestions) return;
+      try {
+        const res = await fetch(`${apiBaseUrl}/api/split-save`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            inboxName: item.name,
+            splits: item.analysis.splitSuggestions,
+            removeInboxSource: true
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) {
+          showToast(`✅ ${data.saved.length} PDF séparés et classés !`);
+          await refreshLiveCatalogAndInbox();
+        }
+      } catch (_) {
+        showToast("⚠️ Erreur lors de la séparation");
+      }
+    }
+
+    async function fileAllInboxItems() {
+      if (!inboxItems.length || !backendOnline) return;
+      for (let i = 0; i < inboxItems.length; i++) {
+        const item = inboxItems[i];
+        const a = item.analysis || {};
+        // Keep official name if the file already has an official LE_FEVRE_THOMAS_* name
+        const keepOff = item.name.startsWith("LE_FEVRE_THOMAS_");
+        const chosenName = keepOff
+          ? item.name
+          : ((a.suggestedNames && a.suggestedNames[0]) ? a.suggestedNames[0].filename : item.name);
+        await fetch(`${apiBaseUrl}/api/inbox/file`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sourceName: item.name,
+            filename: chosenName,
+            driveFolder: a.recommendedFolder || "04 - Administratif & carrière/Poste assistant Cochin",
+            copyToVault: Boolean(a.recommendVaultCopy),
+            vaultCategory: a.vaultCategory || "02_Carriere_Medicale_APHP_Diplomes",
+            docType: a.docType || "Document Drive",
+            docDate: a.docDate || new Date().toISOString().slice(0, 10),
+            summary: a.summary || ""
+          })
+        });
+      }
+      showToast("✅ Tous les fichiers de la racine ont été rangés dans Mon Drive !");
+      await refreshLiveCatalogAndInbox();
+    }
+
+    // ==================== TAB 3 : HISTORY & DRIVE ARCHITECTURE ====================
+    function renderHistoryTab() {
+      const container = document.getElementById("historyListContainer");
+      if (!historyItems || historyItems.length === 0) {
+        container.innerHTML = `
+          <div style="text-align:center;padding:20px 12px;color:var(--text-muted);font-size:0.84rem;">
+            Vos documents scannés et rangés apparaîtront ici avec accès direct au PDF.
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = historyItems.slice(0, 30).map((h) => {
+        const openUrl = backendOnline && apiBaseUrl
+          ? `${apiBaseUrl}/api/file?path=${encodeURIComponent(h.driveRelPath)}`
+          : "#";
+        const dlUrl = backendOnline && apiBaseUrl
+          ? `${apiBaseUrl}/api/file?path=${encodeURIComponent(h.driveRelPath)}&download=1`
+          : "#";
+        return `
+          <div class="doc-item-card">
+            <div class="doc-item-top">
+              <div>
+                <div class="doc-orig-name">✅ ${escapeHtml(h.filename)}</div>
+                <div class="doc-meta-line">
+                  📂 <strong>${escapeHtml(h.driveFolder)}</strong> • ${h.sizeKb || ""} Ko • ${escapeHtml(h.createdAt)}
+                </div>
+                ${h.vaultPath ? `<div style="font-size:0.7rem;color:#38bdf8;margin-top:2px;">🔐 Copié dans AssurImpôts (${escapeHtml(h.vaultPath)})</div>` : ""}
+              </div>
+            </div>
+            ${backendOnline ? `
+              <div class="doc-actions-row">
+                <a href="${openUrl}" target="_blank" rel="noopener" class="btn-sm">👁️ Ouvrir PDF</a>
+                <a href="${dlUrl}" download class="btn-sm">⬇️ Télécharger</a>
+              </div>
+            ` : ""}
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderDrivePlan() {
+      const container = document.getElementById("drivePlanContainer");
+      const groups = {};
+      driveFolders.forEach((f) => {
+        const cat = f.category || f.path.split("/")[0];
+        if (!groups[cat]) groups[cat] = [];
+        groups[cat].push(f);
+      });
+
+      container.innerHTML = Object.entries(groups).map(([cat, list]) => `
+        <div style="margin-bottom:10px;padding:10px 12px;border-radius:12px;background:rgba(15,23,42,0.6);border:1px solid var(--border-subtle);">
+          <div style="font-size:0.82rem;font-weight:800;color:#38bdf8;margin-bottom:6px;">📁 ${escapeHtml(cat)}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            ${list.map((f) => {
+              const subName = f.path.includes("/") ? f.path.split("/").slice(1).join("/") : "Racine catégorie";
+              return `<span style="font-size:0.72rem;padding:4px 8px;border-radius:8px;background:rgba(30,41,59,0.85);color:#cbd5e1;">${escapeHtml(f.emoji || "📂")} ${escapeHtml(subName)}</span>`;
+            }).join("")}
+          </div>
+        </div>
+      `).join("");
+    }
+
+    // ==================== PULL-TO-REFRESH (ICON ONLY) ====================
+    (function initPullToRefresh() {
+      const ptr = document.getElementById("ptrIndicator");
+      let startY = 0;
+      let pulling = false;
+      let dist = 0;
+
+      window.addEventListener("touchstart", (e) => {
+        if (window.scrollY <= 0 && e.touches.length === 1) {
+          startY = e.touches[0].clientY;
+          pulling = true;
+          dist = 0;
+        }
+      }, { passive: true });
+
+      window.addEventListener("touchmove", (e) => {
+        if (!pulling) return;
+        dist = Math.max(0, e.touches[0].clientY - startY);
+        if (dist > 12 && window.scrollY <= 0) {
+          const progress = Math.min(1, dist / 90);
+          ptr.style.opacity = String(progress);
+          ptr.style.transform = `translate(-50%, ${Math.min(28, dist * 0.35 - 16)}px) rotate(${dist * 2.5}deg)`;
+        }
+      }, { passive: true });
+
+      window.addEventListener("touchend", async () => {
+        if (!pulling) return;
+        pulling = false;
+        if (dist >= 85 && window.scrollY <= 0) {
+          ptr.classList.add("spinning");
+          ptr.style.opacity = "1";
+          await discoverBackend(true);
+          setTimeout(() => {
+            ptr.classList.remove("spinning");
+            ptr.style.opacity = "0";
+            ptr.style.transform = "translate(-50%, -24px)";
+          }, 450);
+        } else {
+          ptr.style.opacity = "0";
+          ptr.style.transform = "translate(-50%, -24px)";
+        }
+      }, { passive: true });
+    })();
+
+    // ==================== BOOT ====================
+    window.addEventListener("DOMContentLoaded", () => {
+      populateFolderSelects();
+      updateInboxBadge();
+      renderInboxTab();
+      renderHistoryTab();
+      discoverBackend(false);
+
+      if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+        navigator.serviceWorker.register("./sw.js?v=1.0.0").catch(() => {});
+      }
+    });
+  </script>
+</body>
+</html>
